@@ -22,8 +22,8 @@ graph TD
     CI[CI/CD Runner] -->|Webhook: JSON Payloads| API[Ingestion API]
     API -->|Produces| Kafka[[Kafka: test-results-topic]]
     Kafka -->|Consumes| Analytics[Flake Analytics Engine]
-    Analytics <-->|O(1) State Check| Redis[(Redis)]
-    Analytics -->|Save Telemetry| DB[(PostgreSQL)]
+    Analytics <-->|"O(1) State Check"| Redis[(Redis)]
+    Analytics -->|"Save Telemetry"| DB[(PostgreSQL)]
 ```
 
 ### Key Technical Decisions
@@ -58,12 +58,12 @@ mvn spring-boot:run
 
 ---
 
-## ☁️ Cloud Deployment (AWS)
-This project includes Terraform configurations (`/terraform/main.tf`) for deploying to AWS:
-*   **Compute:** Amazon ECS (Fargate)
-*   **Database:** Amazon RDS (PostgreSQL)
-*   **Cache:** Amazon ElastiCache (Redis)
-*   **Streaming:** Amazon MSK (Kafka)
+## ☁️ Cloud Deployment
+This project is fully Dockerized and cloud-agnostic. 
+You can deploy it to any cloud provider (AWS, GCP, DigitalOcean) by running:
+```bash
+docker-compose up -d
+```
 
 ## 🧪 Testing Strategy
-The project utilizes **Testcontainers** for true integration testing, spinning up ephemeral Docker containers for PostgreSQL, Kafka, and Redis during the `mvn verify` phase.
+The project uses extensive Mockito unit tests for the Flake Detection algorithms, and `@WebMvcTest` for API endpoint verification.
