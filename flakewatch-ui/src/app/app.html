@@ -1,0 +1,23 @@
+<div class="app-container">
+  <!-- App Shell -->
+  <div class="dashboard">
+    <header class="header">
+      <div class="header-content" style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 32px;">
+          <div>
+            <h1 style="font-size: 1.5rem; margin-bottom: 4px;">Flakewatch</h1>
+          </div>
+          
+          <nav style="display: flex; gap: 16px;">
+            <a routerLink="/dashboard" routerLinkActive="active-link" class="nav-link">Dashboard</a>
+            <a routerLink="/integrate" routerLinkActive="active-link" class="nav-link">Integrate</a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding: 32px 0;">
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+</div>

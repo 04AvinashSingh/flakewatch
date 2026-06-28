@@ -1,0 +1,113 @@
+// ============================================================================
+// Flakewatch + Jenkins Integration (Declarative Pipeline)
+// ============================================================================
+// This Jenkinsfile runs your tests and sends the results to Flakewatch
+// so it can automatically detect flaky tests.
+//
+// HOW TO USE:
+// 1. Copy this file to your project root as: Jenkinsfile
+// 2. Add credentials in Jenkins:
+//    - Manage Jenkins → Credentials → Global → Add Credentials
+//    - ID: flakewatch-url       | Type: Secret text | Value: http://your-server:8080
+//    - ID: flakewatch-api-key   | Type: Secret text | Value: your_api_key_here
+// 3. Create a Pipeline job pointing to your repo — Jenkins runs this automatically!
+// ============================================================================
+
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven-3.9'     // Must match your Jenkins Maven installation name
+        jdk   'JDK-21'        // Must match your Jenkins JDK installation name
+    }
+
+    environment {
+        FLAKEWATCH_URL     = credentials('flakewatch-url')
+        FLAKEWATCH_API_KEY = credentials('flakewatch-api-key')
+    }
+
+    stages {
+        // ---- Stage 1: Build ----
+        stage('Build') {
+            steps {
+                echo '🔨 Building project...'
+                sh 'mvn clean compile -B'
+            }
+        }
+
+        // ---- Stage 2: Run Tests ----
+        stage('Test') {
+            steps {
+                echo '🧪 Running tests...'
+                sh 'mvn test -B'
+            }
+            post {
+                // This runs AFTER the test stage, whether tests pass or fail
+                always {
+                    echo '📡 Sending results to Flakewatch...'
+
+                    script {
+                        def testStatus = currentBuild.currentResult == 'SUCCESS' ? 'PASS' : 'FAIL'
+                        def eventId = "${env.BUILD_ID}-${env.BUILD_NUMBER}"
+
+                        def payload = """{
+                            "eventId": "${eventId}",
+                            "commitHash": "${env.GIT_COMMIT}",
+                            "branchName": "${env.GIT_BRANCH}",
+                            "runnerId": "jenkins-${env.NODE_NAME}",
+                            "results": [
+                                {
+                                    "testIdentifier": "com.example.UserServiceTest.testLogin",
+                                    "suiteName": "UserServiceTest",
+                                    "status": "${testStatus}",
+                                    "durationMs": 1200
+                                },
+                                {
+                                    "testIdentifier": "com.example.UserServiceTest.testSignup",
+                                    "suiteName": "UserServiceTest",
+                                    "status": "${testStatus}",
+                                    "durationMs": 800
+                                },
+                                {
+                                    "testIdentifier": "com.example.PaymentTest.testCheckout",
+                                    "suiteName": "PaymentTest",
+                                    "status": "${testStatus}",
+                                    "durationMs": 2500
+                                }
+                            ]
+                        }"""
+
+                        def response = sh(
+                            script: """
+                                curl -s -o /dev/null -w "%{http_code}" \\
+                                    -X POST "${FLAKEWATCH_URL}/api/v1/ingest/test-results" \\
+                                    -H "Content-Type: application/json" \\
+                                    -H "X-API-KEY: ${FLAKEWATCH_API_KEY}" \\
+                                    -d '${payload}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        if (response == '200') {
+                            echo "✅ Results sent to Flakewatch successfully!"
+                        } else {
+                            echo "⚠️ Flakewatch returned HTTP ${response} (non-blocking)"
+                        }
+                    }
+
+                    // Also archive the JUnit XML reports for Jenkins UI
+                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed. Check test results in Flakewatch dashboard.'
+        }
+    }
+}

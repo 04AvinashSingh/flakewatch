@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: flakewatch
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:15432/flakewatch_db
+    username: flakewatch_user
+    password: flakewatch_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 30000
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  # JPA & Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate # Flyway handles schema changes
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Flyway Migrations
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 16379
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: flakewatch-analytics-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+# Actuator & Metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Custom App Properties
+flakewatch:
+  jwt:
+    secret: 4A614E645267556B58703273357638792F423F4528482B4D6251655468576D5A # 256-bit Hex Key
+    expiration-ms: 86400000 # 24 hours
+  security:
+    api-keys: "fw_live_9876543210abcdef,fw_test_1234567890abcdef"
+    rate-limit:
+      requests-per-minute: 100
+  analytics:
+    flake-threshold: 3 # Number of state flips required to quarantine

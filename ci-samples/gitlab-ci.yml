@@ -1,0 +1,86 @@
+# ============================================================================
+# Flakewatch + GitLab CI Integration
+# ============================================================================
+# This pipeline runs your tests and sends the results to Flakewatch
+# so it can automatically detect flaky tests.
+#
+# HOW TO USE:
+# 1. Copy this file to your project root as: .gitlab-ci.yml
+# 2. Add these CI/CD variables (Settings → CI/CD → Variables):
+#    - FLAKEWATCH_URL: http://your-flakewatch-server:8080
+#    - FLAKEWATCH_API_KEY: your_api_key_here (mark as "Masked")
+# 3. Push code — this pipeline runs automatically!
+# ============================================================================
+
+stages:
+  - test
+  - report
+
+# ---- Stage 1: Run your tests ----
+run-tests:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - echo "🧪 Running tests..."
+    - mvn test -B
+  artifacts:
+    # Save test reports so the next stage can parse them
+    paths:
+      - target/surefire-reports/
+    when: always   # Keep artifacts even if tests fail
+    expire_in: 1 hour
+  allow_failure: true   # Don't block the pipeline
+
+# ---- Stage 2: Send results to Flakewatch ----
+report-to-flakewatch:
+  stage: report
+  image: alpine/curl:latest
+  when: always   # Run even if tests failed — that's the point!
+  needs:
+    - job: run-tests
+      artifacts: true
+  script:
+    - |
+      echo "📡 Sending test results to Flakewatch..."
+      
+      # Build the JSON payload
+      # In production, you would parse target/surefire-reports/*.xml
+      PAYLOAD='{
+        "eventId": "'${CI_PIPELINE_ID}'-'${CI_JOB_ID}'",
+        "commitHash": "'${CI_COMMIT_SHA}'",
+        "branchName": "'${CI_COMMIT_BRANCH}'",
+        "runnerId": "gitlab-runner-'${CI_RUNNER_ID}'",
+        "results": [
+          {
+            "testIdentifier": "com.example.UserServiceTest.testLogin",
+            "suiteName": "UserServiceTest",
+            "status": "PASS",
+            "durationMs": 1200
+          },
+          {
+            "testIdentifier": "com.example.UserServiceTest.testSignup",
+            "suiteName": "UserServiceTest",
+            "status": "FAIL",
+            "durationMs": 800,
+            "errorMessage": "Expected 200 but got 500"
+          },
+          {
+            "testIdentifier": "com.example.PaymentTest.testCheckout",
+            "suiteName": "PaymentTest",
+            "status": "PASS",
+            "durationMs": 2500
+          }
+        ]
+      }'
+      
+      RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST "${FLAKEWATCH_URL}/api/v1/ingest/test-results" \
+        -H "Content-Type: application/json" \
+        -H "X-API-KEY: ${FLAKEWATCH_API_KEY}" \
+        -d "${PAYLOAD}")
+      
+      if [ "$RESPONSE" -eq 200 ]; then
+        echo "✅ Results sent to Flakewatch successfully!"
+      else
+        echo "⚠️ Flakewatch returned HTTP ${RESPONSE} (non-blocking)"
+      fi
